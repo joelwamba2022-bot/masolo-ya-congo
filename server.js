@@ -3,6 +3,7 @@ const session = require('express-session');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -28,12 +29,36 @@ io.use((socket, next) => {
     sessionMiddleware(socket.request, {}, next);
 });
 
-// Base de données en mémoire
-let users = [
-  { id: 1, name: 'Julie', age: 24, gender: 'Femme', seeking: 'Homme', city: 'Kinshasa', country: 'RDC', phone: '+243810000001', email: 'julie@masolo.cd', password: 'password123', bio: 'Passionnée de voyages et de café ☕', photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500', isVip: true, vipPlan: '1 an', role: 'member', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
-  { id: 2, name: 'Thomas', age: 27, gender: 'Homme', seeking: 'Femme', city: 'Lubumbashi', country: 'RDC', phone: '+243820000002', email: 'thomas@masolo.cd', password: 'password123', bio: 'Développeur et fan de randonnée 🏔️', photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500', isVip: false, vipPlan: null, role: 'member', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
-  { id: 3, name: 'Admin Masolo', age: 35, gender: 'Homme', seeking: '', city: 'Kinshasa', country: 'RDC', phone: '+243815628477', email: 'admin@masolo.cd', password: 'adminpassword', bio: 'Administrateur système', photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500', isVip: true, vipPlan: '1 an', role: 'admin', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
-];
+// Gestion de la persistance des utilisateurs via un fichier JSON
+const USERS_FILE = path.join(__dirname, 'users.json');
+
+function loadUsers() {
+    try {
+        if (fs.existsSync(USERS_FILE)) {
+            const data = fs.readFileSync(USERS_FILE, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        console.error("Erreur de lecture du fichier users.json", e);
+    }
+    // Comptes par défaut si le fichier n'existe pas encore
+    return [
+      { id: 1, name: 'Julie', age: 24, gender: 'Femme', seeking: 'Homme', city: 'Kinshasa', country: 'RDC', phone: '+243810000001', email: 'julie@masolo.cd', password: 'password123', bio: 'Passionnée de voyages et de café ☕', photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500', isVip: true, vipPlan: '1 an', role: 'member', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 2, name: 'Thomas', age: 27, gender: 'Homme', seeking: 'Femme', city: 'Lubumbashi', country: 'RDC', phone: '+243820000002', email: 'thomas@masolo.cd', password: 'password123', bio: 'Développeur et fan de randonnée 🏔️', photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500', isVip: false, vipPlan: null, role: 'member', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 3, name: 'Admin Masolo', age: 35, gender: 'Homme', seeking: '', city: 'Kinshasa', country: 'RDC', phone: '+243815628477', email: 'admin@masolo.cd', password: 'adminpassword', bio: 'Administrateur système', photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500', isVip: true, vipPlan: '1 an', role: 'admin', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
+    ];
+}
+
+function saveUsers(usersList) {
+    try {
+        fs.writeFileSync(USERS_FILE, JSON.stringify(usersList, null, 2), 'utf8');
+    } catch (e) {
+        console.error("Erreur d'écriture dans users.json", e);
+    }
+}
+
+// Chargement initial des utilisateurs
+let users = loadUsers();
 
 let likes = [];
 let matches = [];
@@ -44,6 +69,7 @@ let pendingPayments = [
 
 // Routes API Backend
 app.get('/api/state', (req, res) => {
+  users = loadUsers(); // S'assure d'avoir les données à jour
   let currentUser = users.find(u => u.id === req.session.userId) || null;
   let enhancedUser = null;
   
@@ -60,6 +86,7 @@ app.get('/api/state', (req, res) => {
 });
 
 app.post('/api/login', (req, res) => {
+  users = loadUsers();
   const { email, password } = req.body;
   const user = users.find(u => (u.email === email || u.phone === email) && u.password === password);
   if (user) {
@@ -73,6 +100,8 @@ app.post('/api/login', (req, res) => {
 app.post('/api/register', (req, res) => {
   const { name, gender, seeking, dob, city, photo, email, password, age } = req.body;
   
+  users = loadUsers(); // Recharge la liste actuelle
+
   if(users.some(u => u.email === email || u.phone === email)) {
     return res.json({ success: false, message: 'Cet email ou téléphone est déjà utilisé.' });
   }
@@ -80,7 +109,7 @@ app.post('/api/register', (req, res) => {
   const userPhoto = photo ? photo : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
 
   const newUser = {
-    id: users.length + 1,
+    id: Date.now(), // Utilisation du timestamp pour un ID unique et infaillible
     name, gender, seeking, dob, city, email, password, age,
     phone: email,
     bio: 'Nouveau membre de Masolo-ya-Congo',
@@ -93,6 +122,8 @@ app.post('/api/register', (req, res) => {
   };
 
   users.push(newUser);
+  saveUsers(users); // Sauvegarde permanente sur le disque
+
   req.session.userId = newUser.id;
   res.json({ success: true });
 });
@@ -102,13 +133,17 @@ app.post('/api/profile/update', (req, res) => {
   const userId = req.session.userId;
   if (!userId) return res.sendStatus(401);
 
+  users = loadUsers();
   let user = users.find(u => u.id === userId);
+  
   if (user) {
     const { name, city, bio, photo } = req.body;
     if (name) user.name = name;
     if (city) user.city = city;
     if (bio) user.bio = bio;
     if (photo) user.photo = photo;
+    
+    saveUsers(users); // Sauvegarde des modifications du profil
     res.json({ success: true });
   } else {
     res.json({ success: false });
@@ -147,6 +182,7 @@ app.get('/api/matches', (req, res) => {
   const userId = req.session.userId;
   if(!userId) return res.sendStatus(401);
 
+  users = loadUsers();
   const userMatches = matches.filter(m => m.users.includes(userId));
   const formattedMatches = userMatches.map(m => {
     const otherId = m.users.find(id => id !== userId);
@@ -164,6 +200,7 @@ app.get('/api/messages/:matchId', (req, res) => {
 });
 
 app.post('/api/pay-submit', (req, res) => {
+  users = loadUsers();
   const { formula, amount, operator, phone, ref } = req.body;
   const user = users.find(u => u.id === req.session.userId);
   if(!user) return res.sendStatus(401);
@@ -188,10 +225,12 @@ app.post('/api/admin/approve', (req, res) => {
   let paymentItem = pendingPayments.find(p => p.id === paymentId);
   if(paymentItem) {
     paymentItem.status = 'approved';
+    users = loadUsers();
     let targetUser = users.find(u => u.id === paymentItem.userId);
     if(targetUser) {
       targetUser.isVip = true;
       targetUser.vipPlan = paymentItem.formula;
+      saveUsers(users); // Sauvegarde de la mise à niveau VIP
     }
     pendingPayments = pendingPayments.filter(p => p.id !== paymentId);
   }
@@ -219,4 +258,4 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => console.log(`Serveur propre prêt sur le port ${PORT}`));
+server.listen(PORT, () => console.log(`Serveur persistant prêt sur le port ${PORT}`));
