@@ -1,7 +1,7 @@
 {
-  "name": "matchlove",
+  "name": "masolo-ya-congo",
   "version": "1.0.0",
-  "description": "App de rencontre PWA",
+  "description": "App de rencontre et tchat Congo",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
