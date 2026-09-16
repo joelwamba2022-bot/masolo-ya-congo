@@ -15,7 +15,7 @@
         .screen { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; }
         .btn { background: #1b5e20; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
         .btn-secondary { background: #e0e0e0; color: #333; }
-        input, select { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; }
+        input, select, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; }
         label { font-size: 0.85rem; font-weight: bold; display: block; margin-bottom: 3px; text-align: left; }
         nav { display: flex; background: #fff; border-top: 1px solid #ddd; height: 60px; justify-content: space-around; align-items: center; }
         nav button { background: none; border: none; font-size: 0.7rem; cursor: pointer; color: #777; flex: 1; height: 100%; }
@@ -143,6 +143,25 @@
             if (data.success) { alert('Paiement soumis ! En attente de validation admin.'); init(); }
         }
 
+        // --- GESTION DE LA CONVERSION D'IMAGE (GALERIE VERS BASE64) ---
+        function convertImageToBase64(event, targetId) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById(targetId).value = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function updatePreview(event) {
+            const file = event.target.files[0];
+            if (file) {
+                document.getElementById('previewPhoto').src = URL.createObjectURL(file);
+            }
+        }
+
         function renderRegister() {
             document.getElementById('mainScreen').innerHTML = `
                 <div>
@@ -153,6 +172,11 @@
                     <label>Recherche :</label><select id="rSeeking"><option>Homme</option><option>Femme</option></select>
                     <label>Date de naissance (18+ min) :</label><input type="date" id="rDob" />
                     <label>Ville :</label><input type="text" id="rCity" value="Kinshasa" />
+                    
+                    <label>Photo de profil (Galerie) :</label>
+                    <input type="file" id="rPhotoFile" accept="image/*" onchange="convertImageToBase64(event, 'rPhotoBase64')" />
+                    <input type="hidden" id="rPhotoBase64" />
+
                     <label>Email / Téléphone :</label><input type="text" id="rEmail" />
                     <label>Mot de passe :</label><input type="password" id="rPass" />
                     <button class="btn" onclick="doRegister()">S'inscrire</button>
@@ -166,17 +190,18 @@
             let seeking = document.getElementById('rSeeking').value;
             let dob = document.getElementById('rDob').value;
             let city = document.getElementById('rCity').value;
+            let photo = document.getElementById('rPhotoBase64').value;
             let email = document.getElementById('rEmail').value;
             let password = document.getElementById('rPass').value;
 
-            if (!name || !dob || !email || !password) { alert('Tous les champs sont requis'); return; }
+            if (!name || !dob || !email || !password) { alert('Tous les champs obligatoires sont requis'); return; }
             let age = new Date().getFullYear() - new Date(dob).getFullYear();
             if (age < 18) { alert('Vous devez avoir au moins 18 ans.'); return; }
 
             let res = await fetch('/api/register', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ name, gender, seeking, dob, city, email, password, age })
+                body: JSON.stringify({ name, gender, seeking, dob, city, photo, email, password, age })
             });
             let data = await res.json();
             if (data.success) { init(); } else { alert(data.message); }
@@ -245,15 +270,69 @@
                 renderPricing();
             } else if (tab === 'profile') {
                 screen.innerHTML = `
-                    <div style="text-align:center; padding-top:20px;">
-                        <img src="${currentUser.photo}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" />
+                    <div style="text-align:center; padding-top:15px;">
+                        <img src="${currentUser.photo}" style="width:80px;height:80px;border-radius:50%;object-fit:cover; margin-bottom:10px;" />
                         <h3>${currentUser.name}</h3>
-                        <p>Statut : ${currentUser.isVip ? 'VIP ('+currentUser.vipPlan+')' : 'Essai Gratuit (3 jours)'}</p>
-                        <button class="btn" style="background:#d32f2f; margin-top:30px;" onclick="logout()">Se déconnecter</button>
+                        <p style="margin:5px 0; color:#555;">📍 ${currentUser.city || 'Kinshasa'}</p>
+                        <p style="margin:5px 0; color:#666; font-size:0.9rem;">"${currentUser.bio || ''}"</p>
+                        <p style="font-size:0.85rem; margin-top:10px;">Statut : <b>${currentUser.isVip ? 'VIP ('+currentUser.vipPlan+')' : 'Essai Gratuit (3 jours)'}</b></p>
+                        
+                        <button class="btn btn-secondary" style="margin-top:15px;" onclick="renderEditProfile()">✏️ Modifier mon profil</button>
+                        <button class="btn" style="background:#d32f2f; margin-top:10px;" onclick="logout()">Se déconnecter</button>
                     </div>
                 `;
             } else if (tab === 'admin') {
                 loadAdminData();
+            }
+        }
+
+        // --- PAGE DE MODIFICATION DU PROFIL ---
+        function renderEditProfile() {
+            let screen = document.getElementById('mainScreen');
+            screen.innerHTML = `
+                <div>
+                    <button onclick="renderTab('profile')" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
+                    <h3>Modifier mon profil</h3>
+                    
+                    <div style="text-align:center; margin-bottom:15px;">
+                        <img id="previewPhoto" src="${currentUser.photo}" style="width:80px; height:80px; border-radius:50%; object-fit:cover;" />
+                    </div>
+
+                    <label>Prénom :</label>
+                    <input type="text" id="editName" value="${currentUser.name}" />
+                    
+                    <label>Ville :</label>
+                    <input type="text" id="editCity" value="${currentUser.city || ''}" />
+                    
+                    <label>Bio :</label>
+                    <textarea id="editBio" rows="3">${currentUser.bio || ''}</textarea>
+                    
+                    <label>Changer la photo (Galerie) :</label>
+                    <input type="file" id="editPhotoFile" accept="image/*" onchange="convertImageToBase64(event, 'editPhotoBase64'); updatePreview(event);" />
+                    <input type="hidden" id="editPhotoBase64" value="${currentUser.photo}" />
+
+                    <button class="btn" onclick="saveProfile()">Enregistrer les modifications</button>
+                </div>
+            `;
+        }
+
+        async function saveProfile() {
+            let name = document.getElementById('editName').value;
+            let city = document.getElementById('editCity').value;
+            let bio = document.getElementById('editBio').value;
+            let photo = document.getElementById('editPhotoBase64').value;
+
+            let res = await fetch('/api/profile/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name, city, bio, photo })
+            });
+            let data = await res.json();
+            if(data.success) {
+                alert('Profil mis à jour avec succès !');
+                init();
+            } else {
+                alert('Erreur lors de la mise à jour.');
             }
         }
 
