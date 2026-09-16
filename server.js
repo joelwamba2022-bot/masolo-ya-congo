@@ -10,9 +10,9 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(__dirname)); // <-- CORRIGÉ ICI : sert les fichiers directement depuis la racine
+app.use(express.json({ limit: '10mb' })); // Augmenté pour accepter les images en Base64
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.static(__dirname)); // Sert les fichiers directement depuis la racine
 
 // Configuration des sessions
 const sessionMiddleware = session({
@@ -71,25 +71,48 @@ app.post('/api/login', (req, res) => {
 });
 
 app.post('/api/register', (req, res) => {
-  const { name, gender, seeking, dob, city, email, password, age } = req.body;
+  const { name, gender, seeking, dob, city, photo, email, password, age } = req.body;
+  
   if(users.some(u => u.email === email || u.phone === email)) {
     return res.json({ success: false, message: 'Cet email ou téléphone est déjà utilisé.' });
   }
+
+  const userPhoto = photo ? photo : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+
   const newUser = {
     id: users.length + 1,
     name, gender, seeking, dob, city, email, password, age,
     phone: email,
-    bio: 'Nouveau membre',
-    photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
+    bio: 'Nouveau membre de Masolo-ya-Congo',
+    photo: userPhoto,
     isVip: false,
     vipPlan: null,
     role: 'member',
     status: 'active',
     createdAt: new Date().toISOString()
   };
+
   users.push(newUser);
   req.session.userId = newUser.id;
   res.json({ success: true });
+});
+
+// Route pour mettre à jour le profil
+app.post('/api/profile/update', (req, res) => {
+  const userId = req.session.userId;
+  if (!userId) return res.sendStatus(401);
+
+  let user = users.find(u => u.id === userId);
+  if (user) {
+    const { name, city, bio, photo } = req.body;
+    if (name) user.name = name;
+    if (city) user.city = city;
+    if (bio) user.bio = bio;
+    if (photo) user.photo = photo;
+    res.json({ success: true });
+  } else {
+    res.json({ success: false });
+  }
 });
 
 app.post('/api/logout', (req, res) => {
