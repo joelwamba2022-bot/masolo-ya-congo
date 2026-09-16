@@ -11,9 +11,9 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '10mb' })); // Augmenté pour accepter les images en Base64
+app.use(express.json({ limit: '10mb' })); // Accepte les images en Base64
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static(__dirname)); // Sert les fichiers directement depuis la racine
+app.use(express.static(__dirname)); // Sert les fichiers depuis la racine
 
 // Configuration des sessions
 const sessionMiddleware = session({
@@ -29,7 +29,7 @@ io.use((socket, next) => {
     sessionMiddleware(socket.request, {}, next);
 });
 
-// Gestion de la persistance des utilisateurs via un fichier JSON
+// Gestion de la persistance des utilisateurs via users.json
 const USERS_FILE = path.join(__dirname, 'users.json');
 
 function loadUsers() {
@@ -57,7 +57,7 @@ function saveUsers(usersList) {
     }
 }
 
-// Chargement initial des utilisateurs
+// Chargement initial
 let users = loadUsers();
 
 let likes = [];
@@ -69,7 +69,7 @@ let pendingPayments = [
 
 // Routes API Backend
 app.get('/api/state', (req, res) => {
-  users = loadUsers(); // S'assure d'avoir les données à jour
+  users = loadUsers(); // Recharge pour avoir les données à jour
   let currentUser = users.find(u => u.id === req.session.userId) || null;
   let enhancedUser = null;
   
@@ -86,21 +86,29 @@ app.get('/api/state', (req, res) => {
 });
 
 app.post('/api/login', (req, res) => {
-  users = loadUsers();
+  users = loadUsers(); // Recharge impérativement la liste depuis le fichier
   const { email, password } = req.body;
+  
   const user = users.find(u => (u.email === email || u.phone === email) && u.password === password);
+  
   if (user) {
     req.session.userId = user.id;
-    res.json({ success: true });
+    req.session.save((err) => {
+      if (err) {
+        console.error("Erreur de sauvegarde de session :", err);
+        return res.json({ success: false, message: "Erreur serveur lors de la connexion." });
+      }
+      res.json({ success: true });
+    });
   } else {
-    res.json({ success: false });
+    res.json({ success: false, message: "Identifiants ou mot de passe incorrects." });
   }
 });
 
 app.post('/api/register', (req, res) => {
   const { name, gender, seeking, dob, city, photo, email, password, age } = req.body;
   
-  users = loadUsers(); // Recharge la liste actuelle
+  users = loadUsers(); // Recharge la liste avant de vérifier les doublons
 
   if(users.some(u => u.email === email || u.phone === email)) {
     return res.json({ success: false, message: 'Cet email ou téléphone est déjà utilisé.' });
@@ -109,7 +117,7 @@ app.post('/api/register', (req, res) => {
   const userPhoto = photo ? photo : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
 
   const newUser = {
-    id: Date.now(), // Utilisation du timestamp pour un ID unique et infaillible
+    id: Date.now(),
     name, gender, seeking, dob, city, email, password, age,
     phone: email,
     bio: 'Nouveau membre de Masolo-ya-Congo',
@@ -122,10 +130,15 @@ app.post('/api/register', (req, res) => {
   };
 
   users.push(newUser);
-  saveUsers(users); // Sauvegarde permanente sur le disque
+  saveUsers(users); // Sauvegarde permanente
 
   req.session.userId = newUser.id;
-  res.json({ success: true });
+  req.session.save((err) => {
+    if (err) {
+      console.error("Erreur de sauvegarde de session à l'inscription :", err);
+    }
+    res.json({ success: true });
+  });
 });
 
 // Route pour mettre à jour le profil
@@ -143,7 +156,7 @@ app.post('/api/profile/update', (req, res) => {
     if (bio) user.bio = bio;
     if (photo) user.photo = photo;
     
-    saveUsers(users); // Sauvegarde des modifications du profil
+    saveUsers(users);
     res.json({ success: true });
   } else {
     res.json({ success: false });
@@ -230,7 +243,7 @@ app.post('/api/admin/approve', (req, res) => {
     if(targetUser) {
       targetUser.isVip = true;
       targetUser.vipPlan = paymentItem.formula;
-      saveUsers(users); // Sauvegarde de la mise à niveau VIP
+      saveUsers(users);
     }
     pendingPayments = pendingPayments.filter(p => p.id !== paymentId);
   }
@@ -258,4 +271,4 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => console.log(`Serveur persistant prêt sur le port ${PORT}`));
+server.listen(PORT, () => console.log(`Serveur persistant et sécurisé prêt sur le port ${PORT}`));
