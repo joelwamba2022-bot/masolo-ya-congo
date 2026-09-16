@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname)); // <-- CORRIGÉ ICI : sert les fichiers directement depuis la racine
 
 // Configuration des sessions
 const sessionMiddleware = session({
