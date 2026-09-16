@@ -26,7 +26,7 @@
         .match-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
         .match-avatar { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 12px; }
         .chat-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding: 5px; }
-        .chat-bubble { max-width: 75%; padding: 10px; border-radius: 8px; font-size: 0.9rem; }
+        .chat-bubble { max-width: 75%; padding: 10px; border-radius: 8px; font-size: 0.9rem; word-break: break-word; }
         .chat-me { background: #dcf8c6; align-self: flex-end; }
         .chat-other { background: #fff; border: 1px solid #ddd; align-self: flex-start; }
     </style>
@@ -62,10 +62,10 @@
                 } else {
                     document.getElementById('bottomNav').style.display = 'flex';
                     let badge = currentUser.isVip ? '<span class="badge">VIP ✨</span>' : '<span class="badge" style="background:#ff9800;color:white;">Essai (3j)</span>';
-                    if(currentUser.role === 'admin') badge += ' <span class="badge" style="background:#d32f2f;color:white;">ADMIN</span>';
+                    if (currentUser.role === 'admin') badge += ' <span class="badge" style="background:#d32f2f;color:white;">ADMIN</span>';
                     document.getElementById('headerRight').innerHTML = badge;
 
-                    if(currentUser.trialExpired && currentUser.role !== 'admin') {
+                    if (currentUser.trialExpired && currentUser.role !== 'admin') {
                         renderPricingLocked();
                     } else {
                         renderTab(currentUser.role === 'admin' ? 'admin' : 'discovery');
@@ -106,7 +106,7 @@
         function renderPricing() {
             document.getElementById('mainScreen').innerHTML = `
                 <div>
-                    <button onclick="${currentUser.trialExpired ? 'renderPricingLocked()' : 'renderTab(\'discovery\')'}" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
+                    <button onclick="${currentUser && currentUser.trialExpired ? 'renderPricingLocked()' : 'renderTab(\'discovery\')'}" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                     <h3 style="color:#1b5e20;">Formules M-Pesa 💎</h3>
                     <div class="pricing-card"><h4>1 Mois - 5 USD</h4><button class="btn" onclick="payModal('1 Mois', '5 USD')">Choisir</button></div>
                     <div class="pricing-card"><h4>5 Mois - 20 USD</h4><button class="btn" onclick="payModal('5 Mois', '20 USD')">Choisir</button></div>
@@ -133,14 +133,14 @@
         async function submitPay(formula, amount) {
             let phone = document.getElementById('pPhone').value;
             let ref = document.getElementById('pRef').value;
-            if(!phone || !ref) { alert('Remplissez tous les champs'); return; }
+            if (!phone || !ref) { alert('Remplissez tous les champs'); return; }
             let res = await fetch('/api/pay-submit', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ formula, amount, operator: 'M-Pesa', phone, ref })
             });
             let data = await res.json();
-            if(data.success) { alert('Paiement soumis ! En attente de validation admin.'); init(); }
+            if (data.success) { alert('Paiement soumis ! En attente de validation admin.'); init(); }
         }
 
         function renderRegister() {
@@ -169,9 +169,9 @@
             let email = document.getElementById('rEmail').value;
             let password = document.getElementById('rPass').value;
 
-            if(!name || !dob || !email || !password) { alert('Tous les champs sont requis'); return; }
+            if (!name || !dob || !email || !password) { alert('Tous les champs sont requis'); return; }
             let age = new Date().getFullYear() - new Date(dob).getFullYear();
-            if(age < 18) { alert('Vous devez avoir au moins 18 ans.'); return; }
+            if (age < 18) { alert('Vous devez avoir au moins 18 ans.'); return; }
 
             let res = await fetch('/api/register', {
                 method: 'POST',
@@ -179,7 +179,7 @@
                 body: JSON.stringify({ name, gender, seeking, dob, city, email, password, age })
             });
             let data = await res.json();
-            if(data.success) { init(); } else { alert(data.message); }
+            if (data.success) { init(); } else { alert(data.message); }
         }
 
         function renderLogin() {
@@ -203,12 +203,13 @@
                 body: JSON.stringify({ email, password })
             });
             let data = await res.json();
-            if(data.success) { init(); } else { alert('Identifiants incorrects'); }
+            if (data.success) { init(); } else { alert('Identifiants incorrects'); }
         }
 
         function renderNav(active) {
             let nav = document.getElementById('bottomNav');
-            if(currentUser.role === 'admin') {
+            if (!currentUser) return;
+            if (currentUser.role === 'admin') {
                 nav.innerHTML = `<button class="active">🛡️ Admin M-Pesa</button><button onclick="logout()">🚪 Quitter</button>`;
             } else {
                 nav.innerHTML = `
@@ -223,10 +224,10 @@
         function renderTab(tab) {
             renderNav(tab);
             let screen = document.getElementById('mainScreen');
-            if(tab === 'discovery') {
+            if (tab === 'discovery') {
                 let filtered = discoveryProfiles.filter(u => u.id !== currentUser.id && u.role !== 'admin');
-                if(discIndex >= filtered.length) discIndex = 0;
-                if(filtered.length === 0) { screen.innerHTML = '<p style="text-align:center; margin-top:50px; color:#777;">Aucun profil disponible.</p>'; return; }
+                if (discIndex >= filtered.length) discIndex = 0;
+                if (filtered.length === 0) { screen.innerHTML = '<p style="text-align:center; margin-top:50px; color:#777;">Aucun profil disponible.</p>'; return; }
                 let p = filtered[discIndex];
                 screen.innerHTML = `
                     <div class="profile-card" style="background-image: url('${p.photo}')">
@@ -238,11 +239,11 @@
                         <button class="btn" onclick="swipe('like', ${p.id})">💖 J'aime</button>
                     </div>
                 `;
-            } else if(tab === 'matches') {
+            } else if (tab === 'matches') {
                 loadMatchesScreen();
-            } else if(tab === 'pricing') {
+            } else if (tab === 'pricing') {
                 renderPricing();
-            } else if(tab === 'profile') {
+            } else if (tab === 'profile') {
                 screen.innerHTML = `
                     <div style="text-align:center; padding-top:20px;">
                         <img src="${currentUser.photo}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" />
@@ -251,20 +252,20 @@
                         <button class="btn" style="background:#d32f2f; margin-top:30px;" onclick="logout()">Se déconnecter</button>
                     </div>
                 `;
-            } else if(tab === 'admin') {
+            } else if (tab === 'admin') {
                 loadAdminData();
             }
         }
 
         async function swipe(action, targetId) {
-            if(action === 'like') {
+            if (action === 'like') {
                 let res = await fetch('/api/like', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ targetId })
                 });
                 let data = await res.json();
-                if(data.matched) {
+                if (data.matched) {
                     alert('🎉 C\'est un Match ! Vous pouvez maintenant discuter.');
                 }
             }
@@ -277,7 +278,7 @@
             let data = await res.json();
             let screen = document.getElementById('mainScreen');
             let html = '<h3 style="color:#1b5e20;">Vos Matchs 💬</h3>';
-            if(data.matches.length === 0) {
+            if (data.matches.length === 0) {
                 html += '<p style="color:#777; text-align:center; margin-top:40px;">Aucun match pour le moment. Continuez à swiper !</p>';
             } else {
                 data.matches.forEach(m => {
@@ -305,7 +306,7 @@
                 </div>
                 <div class="chat-box" id="chatBox"></div>
                 <div style="display:flex; gap:5px;">
-                    <input type="text" id="msgInput" placeholder="Écrivez un message..." style="margin:0;" />
+                    <input type="text" id="msgInput" placeholder="Écrivez un message..." style="margin:0;" onkeypress="checkSend(event)" />
                     <button class="btn" style="width:80px; margin:0;" onclick="sendMessage()">Envoyer</button>
                 </div>
             `;
@@ -319,18 +320,25 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
+        function checkSend(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
         function sendMessage() {
             let input = document.getElementById('msgInput');
+            if (!input) return;
             let text = input.value.trim();
-            if(!text) return;
+            if (!text) return;
             socket.emit('sendMessage', { matchId: currentMatchId, text });
             input.value = '';
         }
 
         socket.on('receiveMessage', (msg) => {
-            if(msg.matchId === currentMatchId) {
+            if (msg.matchId === currentMatchId) {
                 let chatBox = document.getElementById('chatBox');
-                if(chatBox) {
+                if (chatBox) {
                     let isMe = msg.senderId === currentUser.id;
                     chatBox.innerHTML += `<div class="chat-bubble ${isMe ? 'chat-me' : 'chat-other'}">${msg.text}</div>`;
                     chatBox.scrollTop = chatBox.scrollHeight;
@@ -342,7 +350,7 @@
             let res = await fetch('/api/admin/data');
             let data = await res.json();
             let html = '<h3>Panneau Administrateur</h3>';
-            if(data.pendingPayments.length === 0) {
+            if (data.pendingPayments.length === 0) {
                 html += '<p style="color:#777;">Aucun paiement M-Pesa en attente.</p>';
             } else {
                 data.pendingPayments.forEach(p => {
