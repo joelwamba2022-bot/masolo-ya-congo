@@ -1,26 +1,42 @@
 const express = require('express');
 const session = require('express-session');
+const http = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Configuration des sessions
-app.use(session({
+const sessionMiddleware = session({
     secret: 'masolo-congo-secret-key-2026',
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false }
-}));
+});
 
-// Base de données en mémoire (avec createdAt pour gérer l'essai gratuit de 3 jours)
+app.use(sessionMiddleware);
+
+// Partager la session avec Socket.io
+io.use((socket, next) => {
+    sessionMiddleware(socket.request, {}, next);
+});
+
+// Base de données en mémoire
 let users = [
   { id: 1, name: 'Julie', age: 24, gender: 'Femme', seeking: 'Homme', city: 'Kinshasa', country: 'RDC', phone: '+243810000001', email: 'julie@masolo.cd', password: 'password123', bio: 'Passionnée de voyages et de café ☕', photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500', isVip: true, vipPlan: '1 an', role: 'member', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
   { id: 2, name: 'Thomas', age: 27, gender: 'Homme', seeking: 'Femme', city: 'Lubumbashi', country: 'RDC', phone: '+243820000002', email: 'thomas@masolo.cd', password: 'password123', bio: 'Développeur et fan de randonnée 🏔️', photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500', isVip: false, vipPlan: null, role: 'member', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
   { id: 3, name: 'Admin Masolo', age: 35, gender: 'Homme', seeking: '', city: 'Kinshasa', country: 'RDC', phone: '+243815628477', email: 'admin@masolo.cd', password: 'adminpassword', bio: 'Administrateur système', photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500', isVip: true, vipPlan: '1 an', role: 'admin', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
 ];
 
+let likes = [];       // Stocke les likes: { fromUserId, toUserId }
+let matches = [];     // Stocke les matchs validés: { id, users: [id1, id2] }
+let messages = [];    // Stocke les messages: { matchId, senderId, text, time }
 let pendingPayments = [
   { id: 101, userId: 2, userName: 'Thomas', formula: '5 mois (20 USD)', amount: '20 USD', operator: 'M-Pesa', phone: '+24381****002', ref: 'MP26.1234.ABCD', date: '2026-09-16 12:00', status: 'pending' }
 ];
@@ -45,7 +61,7 @@ app.get('/sw.js', (req, res) => {
   res.send(`self.addEventListener('fetch', (e) => {});`);
 });
 
-// Page HTML principale
+// Page HTML principale intégrée
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="fr">
@@ -54,6 +70,7 @@ app.get('/', (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Masolo-ya-Congo</title>
     <link rel="manifest" href="/manifest.json">
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         * { box-sizing: border-box; font-family: Arial, sans-serif; }
         body { background: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -66,11 +83,17 @@ app.get('/', (req, res) => {
         input, select { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; }
         label { font-size: 0.85rem; font-weight: bold; display: block; margin-bottom: 3px; text-align: left; }
         nav { display: flex; background: #fff; border-top: 1px solid #ddd; height: 60px; justify-content: space-around; align-items: center; }
-        nav button { background: none; border: none; font-size: 0.75rem; cursor: pointer; color: #777; flex: 1; height: 100%; }
+        nav button { background: none; border: none; font-size: 0.7rem; cursor: pointer; color: #777; flex: 1; height: 100%; }
         nav button.active { color: #1b5e20; font-weight: bold; }
         .badge { font-size: 0.7rem; background: gold; color: #333; padding: 3px 6px; border-radius: 6px; font-weight: bold; }
-        .profile-card { width: 100%; height: 320px; background-size: cover; background-position: center; border-radius: 8px; display: flex; flex-direction: column; justify-content: flex-end; color: white; padding: 15px; margin-bottom: 15px; }
-        .pricing-card { background: #f9f9f9; border: 1px solid #1b5e20; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+        .profile-card { width: 100%; height: 320px; background-size: cover; background-position: center; border-radius: 8px; display: flex; flex-direction: column; justify-content: flex-end; color: white; padding: 15px; margin-bottom: 15px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+        .pricing-card { background: #f9f9f9; border: 1px solid #1b5e20; padding: 10px; border-radius: 6px; margin-bottom: 10px; text-align: left; }
+        .match-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .match-avatar { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 12px; }
+        .chat-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding: 5px; }
+        .chat-bubble { max-width: 75%; padding: 10px; border-radius: 8px; font-size: 0.9rem; }
+        .chat-me { background: #dcf8c6; align-self: flex-end; }
+        .chat-other { background: #fff; border: 1px solid #ddd; align-self: flex-start; }
     </style>
 </head>
 <body>
@@ -84,9 +107,11 @@ app.get('/', (req, res) => {
     </div>
 
     <script>
+        let socket = io();
         let currentUser = null;
         let discoveryProfiles = [];
         let discIndex = 0;
+        let currentMatchId = null;
 
         async function init() {
             try {
@@ -105,7 +130,6 @@ app.get('/', (req, res) => {
                     if(currentUser.role === 'admin') badge += ' <span class="badge" style="background:#d32f2f;color:white;">ADMIN</span>';
                     document.getElementById('headerRight').innerHTML = badge;
 
-                    // Si l'essai est expiré et non VIP, on force l'écran des tarifs
                     if(currentUser.trialExpired && currentUser.role !== 'admin') {
                         renderPricingLocked();
                     } else {
@@ -119,7 +143,7 @@ app.get('/', (req, res) => {
         }
 
         function renderWelcome() {
-            document.getElementById('mainScreen').innerHTML = `
+            document.getElementById('mainScreen').innerHTML = \`
                 <div style="text-align:center; margin-top:auto; margin-bottom:auto;">
                     <h2 style="color: #1b5e20;">Bienvenue sur Masolo-ya-Congo 🇨🇩</h2>
                     <p style="color: #666; font-size: 0.9rem; margin-bottom: 20px;">Le réseau de rencontres sécurisé en RDC (18+).<br><b>3 jours d'essai offerts !</b></p>
@@ -127,37 +151,37 @@ app.get('/', (req, res) => {
                     <button class="btn btn-secondary" onclick="renderLogin()">Se connecter</button>
                     <button class="btn btn-secondary" onclick="renderPricing()" style="margin-top:10px;">Voir les Tarifs M-Pesa 💎</button>
                 </div>
-            `;
+            \`;
         }
 
         function renderPricingLocked() {
             document.getElementById('bottomNav').style.display = 'none';
-            document.getElementById('mainScreen').innerHTML = `
+            document.getElementById('mainScreen').innerHTML = \`
                 <div style="text-align:center; padding-top:10px;">
                     <h3 style="color:#d32f2f;">⏳ Période d'essai expirée !</h3>
-                    <p style="font-size:0.85rem; color:#555;">Vos 3 jours d'essai gratuits sont terminés. Abonnez-vous via M-Pesa pour continuer à profiter de l'application.</p>
+                    <p style="font-size:0.85rem; color:#555;">Vos 3 jours d'essai gratuits sont terminés. Abonnez-vous via M-Pesa pour continuer.</p>
                     <div class="pricing-card"><h4>1 Mois - 5 USD</h4><button class="btn" onclick="payModal('1 Mois', '5 USD')">Choisir</button></div>
                     <div class="pricing-card"><h4>5 Mois - 20 USD</h4><button class="btn" onclick="payModal('5 Mois', '20 USD')">Choisir</button></div>
                     <div class="pricing-card"><h4>1 An - 50 USD</h4><button class="btn" onclick="payModal('1 An', '50 USD')">Choisir</button></div>
                     <button class="btn btn-secondary" style="margin-top:20px; background:#d32f2f; color:white;" onclick="logout()">Se déconnecter</button>
                 </div>
-            `;
+            \`;
         }
 
         function renderPricing() {
-            document.getElementById('mainScreen').innerHTML = `
+            document.getElementById('mainScreen').innerHTML = \`
                 <div>
-                    <button onclick="\${currentUser ? (currentUser.trialExpired ? 'renderPricingLocked()' : 'renderTab(\\'discovery\\')') : 'renderWelcome()'}" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
+                    <button onclick="\${currentUser.trialExpired ? 'renderPricingLocked()' : 'renderTab(\\'discovery\\')'}" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                     <h3 style="color:#1b5e20;">Formules M-Pesa 💎</h3>
                     <div class="pricing-card"><h4>1 Mois - 5 USD</h4><button class="btn" onclick="payModal('1 Mois', '5 USD')">Choisir</button></div>
                     <div class="pricing-card"><h4>5 Mois - 20 USD</h4><button class="btn" onclick="payModal('5 Mois', '20 USD')">Choisir</button></div>
                     <div class="pricing-card"><h4>1 An - 50 USD</h4><button class="btn" onclick="payModal('1 An', '50 USD')">Choisir</button></div>
                 </div>
-            `;
+            \`;
         }
 
         function payModal(formula, price) {
-            document.getElementById('mainScreen').innerHTML = `
+            document.getElementById('mainScreen').innerHTML = \`
                 <div>
                     <button onclick="renderPricing()" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                     <h3>Paiement M-Pesa pour \${formula} (\${price})</h3>
@@ -168,7 +192,7 @@ app.get('/', (req, res) => {
                     <input type="text" id="pRef" placeholder="Ex: MP26.XXXX.YYYY" />
                     <button class="btn" onclick="submitPay('\${formula}', '\${price}')">Valider le paiement</button>
                 </div>
-            `;
+            \`;
         }
 
         async function submitPay(formula, amount) {
@@ -185,7 +209,7 @@ app.get('/', (req, res) => {
         }
 
         function renderRegister() {
-            document.getElementById('mainScreen').innerHTML = `
+            document.getElementById('mainScreen').innerHTML = \`
                 <div>
                     <button onclick="renderWelcome()" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                     <h3>Créer un compte (3 jours offerts)</h3>
@@ -198,7 +222,7 @@ app.get('/', (req, res) => {
                     <label>Mot de passe :</label><input type="password" id="rPass" />
                     <button class="btn" onclick="doRegister()">S'inscrire</button>
                 </div>
-            `;
+            \`;
         }
 
         async function doRegister() {
@@ -224,7 +248,7 @@ app.get('/', (req, res) => {
         }
 
         function renderLogin() {
-            document.getElementById('mainScreen').innerHTML = `
+            document.getElementById('mainScreen').innerHTML = \`
                 <div style="margin-top:auto; margin-bottom:auto;">
                     <button onclick="renderWelcome()" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                     <h3>Connexion</h3>
@@ -232,7 +256,7 @@ app.get('/', (req, res) => {
                     <label>Mot de passe :</label><input type="password" id="lPass" />
                     <button class="btn" onclick="doLogin()">Se connecter</button>
                 </div>
-            `;
+            \`;
         }
 
         async function doLogin() {
@@ -250,13 +274,14 @@ app.get('/', (req, res) => {
         function renderNav(active) {
             let nav = document.getElementById('bottomNav');
             if(currentUser.role === 'admin') {
-                nav.innerHTML = `<button class="active">🛡️ Admin M-Pesa</button><button onclick="logout()">🚪 Quitter</button>`;
+                nav.innerHTML = \`<button class="active">🛡️ Admin M-Pesa</button><button onclick="logout()">🚪 Quitter</button>\`;
             } else {
-                nav.innerHTML = `
+                nav.innerHTML = \`
                     <button onclick="renderTab('discovery')" class="\${active==='discovery'?'active':''}">🔥 Découvrir</button>
+                    <button onclick="renderTab('matches')" class="\${active==='matches'?'active':''}">💬 Matchs</button>
                     <button onclick="renderTab('pricing')" class="\${active==='pricing'?'active':''}">💎 VIP</button>
                     <button onclick="renderTab('profile')" class="\${active==='profile'?'active':''}">👤 Profil</button>
-                `;
+                \`;
             }
         }
 
@@ -268,31 +293,115 @@ app.get('/', (req, res) => {
                 if(discIndex >= filtered.length) discIndex = 0;
                 if(filtered.length === 0) { screen.innerHTML = '<p style="text-align:center; margin-top:50px; color:#777;">Aucun profil disponible.</p>'; return; }
                 let p = filtered[discIndex];
-                screen.innerHTML = `
+                screen.innerHTML = \`
                     <div class="profile-card" style="background-image: url('\${p.photo}')">
                         <h2>\${p.name}, \${p.age} ans</h2>
                         <p>📍 \${p.city} • \${p.bio}</p>
                     </div>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn btn-secondary" onclick="discIndex++; renderTab('discovery')">❌ Passer</button>
-                        <button class="btn" onclick="alert('Like !'); discIndex++; renderTab('discovery')">💖 J'aime</button>
+                        <button class="btn btn-secondary" onclick="swipe('pass', \${p.id})">❌ Passer</button>
+                        <button class="btn" onclick="swipe('like', \${p.id})">💖 J'aime</button>
                     </div>
-                `;
+                \`;
+            } else if(tab === 'matches') {
+                loadMatchesScreen();
             } else if(tab === 'pricing') {
                 renderPricing();
             } else if(tab === 'profile') {
-                screen.innerHTML = `
+                screen.innerHTML = \`
                     <div style="text-align:center; padding-top:20px;">
                         <img src="\${currentUser.photo}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" />
                         <h3>\${currentUser.name}</h3>
                         <p>Statut : \${currentUser.isVip ? 'VIP ('+currentUser.vipPlan+')' : 'Essai Gratuit (3 jours)'}</p>
                         <button class="btn" style="background:#d32f2f; margin-top:30px;" onclick="logout()">Se déconnecter</button>
                     </div>
-                `;
+                \`;
             } else if(tab === 'admin') {
                 loadAdminData();
             }
         }
+
+        async function swipe(action, targetId) {
+            if(action === 'like') {
+                let res = await fetch('/api/like', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ targetId })
+                });
+                let data = await res.json();
+                if(data.matched) {
+                    alert('🎉 C\'est un Match ! Vous pouvez maintenant discuter.');
+                }
+            }
+            discIndex++;
+            renderTab('discovery');
+        }
+
+        async function loadMatchesScreen() {
+            let res = await fetch('/api/matches');
+            let data = await res.json();
+            let screen = document.getElementById('mainScreen');
+            let html = '<h3 style="color:#1b5e20;">Vos Matchs 💬</h3>';
+            if(data.matches.length === 0) {
+                html += '<p style="color:#777; text-align:center; margin-top:40px;">Aucun match pour le moment. Continuez à swiper !</p>';
+            } else {
+                data.matches.forEach(m => {
+                    html += \`<div class="match-item" onclick="openChat('\${m.matchId}', '\${m.otherUser.name}', '\${m.otherUser.photo}')">
+                        <img src="\${m.otherUser.photo}" class="match-avatar" />
+                        <div><strong>\${m.otherUser.name}</strong><br><small style="color:#666;">Cliquez pour discuter</small></div>
+                    </div>\`;
+                });
+            }
+            screen.innerHTML = html;
+        }
+
+        async function openChat(matchId, name, photo) {
+            currentMatchId = matchId;
+            socket.emit('joinMatch', matchId);
+            let res = await fetch('/api/messages/' + matchId);
+            let data = await res.json();
+
+            let screen = document.getElementById('mainScreen');
+            let html = \`
+                <div style="display:flex; align-items:center; border-bottom:1px solid #ddd; padding-bottom:8px; margin-bottom:8px;">
+                    <button onclick="renderTab('matches')" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-right:10px;">⬅</button>
+                    <img src="\${photo}" style="width:35px;height:35px;border-radius:50%;object-fit:cover;margin-right:8px;" />
+                    <b>\${name}</b>
+                </div>
+                <div class="chat-box" id="chatBox"></div>
+                <div style="display:flex; gap:5px;">
+                    <input type="text" id="msgInput" placeholder="Écrivez un message..." style="margin:0;" />
+                    <button class="btn" style="width:80px; margin:0;" onclick="sendMessage()">Envoyer</button>
+                </div>
+            \`;
+            screen.innerHTML = html;
+
+            let chatBox = document.getElementById('chatBox');
+            data.messages.forEach(msg => {
+                let isMe = msg.senderId === currentUser.id;
+                chatBox.innerHTML += \`<div class="chat-bubble \${isMe ? 'chat-me' : 'chat-other'}">\${msg.text}</div>\`;
+            });
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function sendMessage() {
+            let input = document.getElementById('msgInput');
+            let text = input.value.trim();
+            if(!text) return;
+            socket.emit('sendMessage', { matchId: currentMatchId, text });
+            input.value = '';
+        }
+
+        socket.on('receiveMessage', (msg) => {
+            if(msg.matchId === currentMatchId) {
+                let chatBox = document.getElementById('chatBox');
+                if(chatBox) {
+                    let isMe = msg.senderId === currentUser.id;
+                    chatBox.innerHTML += \`<div class="chat-bubble \${isMe ? 'chat-me' : 'chat-other'}">\${msg.text}</div>\`;
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }
+        });
 
         async function loadAdminData() {
             let res = await fetch('/api/admin/data');
@@ -302,12 +411,12 @@ app.get('/', (req, res) => {
                 html += '<p style="color:#777;">Aucun paiement M-Pesa en attente.</p>';
             } else {
                 data.pendingPayments.forEach(p => {
-                    html += `<div class="pricing-card">
+                    html += \`<div class="pricing-card">
                         <b>Utilisateur :</b> \${p.userName} (\${p.phone})<br>
                         <b>Formule :</b> \${p.formula} (\${p.amount})<br>
                         <b>Réf :</b> \${p.ref}<br>
                         <button class="btn" style="background:#2e7d32;" onclick="approve(\${p.id})">✅ Approuver VIP</button>
-                    </div>`;
+                    </div>\`;
                 });
             }
             document.getElementById('mainScreen').innerHTML = html;
@@ -340,7 +449,6 @@ app.get('/api/state', (req, res) => {
   let enhancedUser = null;
   
   if (currentUser) {
-    // Calcul de la période d'essai de 3 jours
     const createdAt = new Date(currentUser.createdAt || Date.now());
     const now = new Date();
     const diffTime = now - createdAt;
@@ -379,7 +487,7 @@ app.post('/api/register', (req, res) => {
     vipPlan: null,
     role: 'member',
     status: 'active',
-    createdAt: new Date().toISOString() // Date exacte d'inscription pour l'essai de 3 jours
+    createdAt: new Date().toISOString()
   };
   users.push(newUser);
   req.session.userId = newUser.id;
@@ -388,6 +496,52 @@ app.post('/api/register', (req, res) => {
 
 app.post('/api/logout', (req, res) => {
   req.session.destroy(() => res.json({ success: true }));
+});
+
+// Gestion des Likes et Matchs
+app.post('/api/like', (req, res) => {
+  const userId = req.session.userId;
+  const { targetId } = req.body;
+  if(!userId) return res.sendStatus(401);
+
+  likes.push({ fromUserId: userId, toUserId: targetId });
+
+  // Vérifier s'il y a un match réciproque
+  const mutualLike = likes.find(l => l.fromUserId === targetId && l.toUserId === userId);
+  let matched = false;
+
+  if(mutualLike) {
+    matched = true;
+    const matchExists = matches.some(m => m.users.includes(userId) && m.users.includes(targetId));
+    if(!matchExists) {
+      matches.push({
+        matchId: 'match_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        users: [userId, targetId]
+      });
+    }
+  }
+
+  res.json({ success: true, matched });
+});
+
+app.get('/api/matches', (req, res) => {
+  const userId = req.session.userId;
+  if(!userId) return res.sendStatus(401);
+
+  const userMatches = matches.filter(m => m.users.includes(userId));
+  const formattedMatches = userMatches.map(m => {
+    const otherId = m.users.find(id => id !== userId);
+    const otherUser = users.find(u => u.id === otherId);
+    return { matchId: m.matchId, otherUser };
+  });
+
+  res.json({ matches: formattedMatches });
+});
+
+app.get('/api/messages/:matchId', (req, res) => {
+  const { matchId } = req.params;
+  const matchMessages = messages.filter(msg => msg.matchId === matchId);
+  res.json({ messages: matchMessages });
 });
 
 app.post('/api/pay-submit', (req, res) => {
@@ -415,7 +569,7 @@ app.post('/api/admin/approve', (req, res) => {
   let paymentItem = pendingPayments.find(p => p.id === paymentId);
   if(paymentItem) {
     paymentItem.status = 'approved';
-    let targetUser = users.find(u => u.id === paymentItem.userId);
+    let targetUser = users.profind ? users.find(u => u.id === paymentItem.userId) : users.find(u => u.id === paymentItem.userId);
     if(targetUser) {
       targetUser.isVip = true;
       targetUser.vipPlan = paymentItem.formula;
@@ -425,4 +579,26 @@ app.post('/api/admin/approve', (req, res) => {
   res.json({ success: true });
 });
 
-app.listen(PORT, () => console.log(`Serveur prêt sur le port ${PORT}`));
+// Socket.io pour le chat en direct
+io.on('connection', (socket) => {
+  socket.on('joinMatch', (matchId) => {
+    socket.join(matchId);
+  });
+
+  socket.on('sendMessage', (data) => {
+    const sessionUser = socket.request.session.userId;
+    if(!sessionUser) return;
+
+    const newMessage = {
+      matchId: data.matchId,
+      senderId: sessionUser,
+      text: data.text,
+      time: new Date().toISOString()
+    };
+
+    messages.push(newMessage);
+    io.to(data.matchId).emit('receiveMessage', newMessage);
+  });
+});
+
+server.listen(PORT, () => console.log(`Serveur complet prêt sur le port ${PORT}`));
