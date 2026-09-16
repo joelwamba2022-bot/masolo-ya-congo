@@ -1,9 +1,18 @@
 const express = require('express');
+const session = require('express-session');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Configuration des sessions express (Essentiel pour isoler les utilisateurs)
+app.use(session({
+  secret: 'masolo-cong-secret-key-2026',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false } // Mettre true si vous utilisez HTTPS en production
+}));
 
 // --- BASE DE DONNÉES EN MÉMOIRE (ÉVOLUTIVE) ---
 let users = [
@@ -19,13 +28,6 @@ let pendingPayments = [
 let matches = [
   { user1: 1, user2: 2, status: 'accepted' }
 ];
-
-let messages = {
-  '1_2': [
-    { sender: 1, text: 'Mbote Thomas ! Comment ça va ?', time: '12:05' },
-    { sender: 2, text: 'Mpova Julie ! Ça va super et toi ?', time: '12:06' }
-  ]
-};
 
 // --- PWA MANIFEST & SERVICE WORKER ---
 app.get('/manifest.json', (req, res) => {
@@ -136,7 +138,7 @@ app.get('/', (req, res) => {
             }
 
             function renderWelcome() {
-                document.getElementById('mainScreen').innerHTML = \`
+                document.getElementById('mainScreen').innerHTML = `
                     <div style="padding: 25px; text-align: center; display:flex; flex-direction:column; justify-content:center; height:100%;">
                         <h2 style="color: #1b5e20; margin-bottom: 5px;">Bienvenue sur Masolo-ya-Congo 🇨🇩</h2>
                         <p style="color: #666; font-size: 0.9rem; margin-bottom: 25px;">Le réseau de rencontres sécurisé en RDC.</p>
@@ -147,13 +149,13 @@ app.get('/', (req, res) => {
                         <button class="btn btn-secondary" onclick="renderLogin()">Se connecter</button>
                         <button class="btn btn-secondary" onclick="renderPricing()" style="margin-top:15px;">Voir les Tarifs M-Pesa 💎</button>
                     </div>
-                \`;
+                `;
             }
 
             function renderPricing() {
-                document.getElementById('mainScreen').innerHTML = \`
+                document.getElementById('mainScreen').innerHTML = `
                     <div style="padding: 20px;">
-                        <button onclick="\${currentUser ? 'renderTab(\\'discovery\\')' : 'renderWelcome()'}" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
+                        <button onclick="${currentUser ? 'renderTab(\'discovery\')' : 'renderWelcome()'}" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                         <h3 style="color:#1b5e20;">Formules d'Abonnement M-Pesa 💎</h3>
                         <p style="font-size:0.85rem; color:#666;">Paiement manuel sécurisé via M-Pesa.</p>
                         
@@ -181,15 +183,15 @@ app.get('/', (req, res) => {
                             <button class="btn" onclick="renderPaymentInstructions('1 An', '50 USD')">Choisir (50 USD)</button>
                         </div>
                     </div>
-                \`;
+                `;
             }
 
             function renderPaymentInstructions(formula, price) {
-                document.getElementById('mainScreen').innerHTML = \`
+                document.getElementById('mainScreen').innerHTML = `
                     <div style="padding: 20px;">
                         <button onclick="renderPricing()" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                         <h3 style="color:#1b5e20;">Instructions de Paiement M-Pesa 🟢</h3>
-                        <p style="font-size:0.85rem;">Formule choisie : <strong>\${formula}</strong> (\${price})</p>
+                        <p style="font-size:0.85rem;">Formule choisie : <strong>${formula}</strong> (${price})</p>
                         
                         <div style="background:#e8f5e9; border:1px solid #34a853; padding:12px; border-radius:8px; font-size:0.85rem; margin-bottom:15px;">
                             <strong>Opérateur :</strong> M-Pesa uniquement<br>
@@ -204,9 +206,9 @@ app.get('/', (req, res) => {
                         <label>Référence de transaction M-Pesa :</label>
                         <input type="text" id="payRef" placeholder="Ex: MP26.XXXX.YYYY" />
 
-                        <button class="btn" onclick="submitPayment('\${formula}', '\${price}')">Soumettre pour vérification</button>
+                        <button class="btn" onclick="submitPayment('${formula}', '${price}')">Soumettre pour vérification</button>
                     </div>
-                \`;
+                `;
             }
 
             async function submitPayment(formula, price) {
@@ -227,7 +229,7 @@ app.get('/', (req, res) => {
             }
 
             function renderRegister() {
-                document.getElementById('mainScreen').innerHTML = \`
+                document.getElementById('mainScreen').innerHTML = `
                     <div style="padding: 20px;">
                         <button onclick="renderWelcome()" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:10px;">⬅ Retour</button>
                         <h3>Créer un compte 🚀</h3>
@@ -250,7 +252,7 @@ app.get('/', (req, res) => {
                         </div>
                         <button class="btn" onclick="registerUser()">S'inscrire</button>
                     </div>
-                \`;
+                `;
             }
 
             async function registerUser() {
@@ -283,7 +285,7 @@ app.get('/', (req, res) => {
             }
 
             function renderLogin() {
-                document.getElementById('mainScreen').innerHTML = \`
+                document.getElementById('mainScreen').innerHTML = `
                     <div style="padding: 25px; display:flex; flex-direction:column; justify-content:center; height:100%;">
                         <button onclick="renderWelcome()" style="background:none; border:none; color:#1b5e20; font-weight:bold; cursor:pointer; margin-bottom:15px; text-align:left;">⬅ Retour</button>
                         <h3>Connexion 👋</h3>
@@ -293,7 +295,7 @@ app.get('/', (req, res) => {
                         <input type="password" id="loginPass" placeholder="Votre mot de passe" />
                         <button class="btn" onclick="loginUser()">Se connecter</button>
                     </div>
-                \`;
+                `;
             }
 
             async function loginUser() {
@@ -311,17 +313,17 @@ app.get('/', (req, res) => {
             function renderNav(active) {
                 const nav = document.getElementById('bottomNav');
                 if(currentUser.role === 'admin') {
-                    nav.innerHTML = \`
-                        <button onclick="renderTab('admin')" class="\${active==='admin'?'active':''}">🛡️ <span>Admin M-Pesa</span></button>
+                    nav.innerHTML = `
+                        <button onclick="renderTab('admin')" class="${active==='admin'?'active':''}">🛡️ <span>Admin M-Pesa</span></button>
                         <button onclick="logout()">🚪 <span>Quitter</span></button>
-                    \`;
+                    `;
                 } else {
-                    nav.innerHTML = \`
-                        <button onclick="renderTab('discovery')" class="\${active==='discovery'?'active':''}">🔥 <span>Découvrir</span></button>
-                        <button onclick="renderTab('matches')" class="\${active==='matches'?'active':''}">💬 <span>Masolo</span></button>
-                        <button onclick="renderTab('pricing')" class="\${active==='pricing'?'active':''}">💎 <span>M-Pesa VIP</span></button>
-                        <button onclick="renderTab('profile')" class="\${active==='profile'?'active':''}">👤 <span>Profil</span></button>
-                    \`;
+                    nav.innerHTML = `
+                        <button onclick="renderTab('discovery')" class="${active==='discovery'?'active':''}">🔥 <span>Découvrir</span></button>
+                        <button onclick="renderTab('matches')" class="${active==='matches'?'active':''}">💬 <span>Masolo</span></button>
+                        <button onclick="renderTab('pricing')" class="${active==='pricing'?'active':''}">💎 <span>M-Pesa VIP</span></button>
+                        <button onclick="renderTab('profile')" class="${active==='profile'?'active':''}">👤 <span>Profil</span></button>
+                    `;
                 }
             }
 
@@ -340,12 +342,12 @@ app.get('/', (req, res) => {
                         return;
                     }
                     let p = filtered[discIndex];
-                    screen.innerHTML = \`
+                    screen.innerHTML = `
                         <div style="padding:15px; display:flex; flex-direction:column; height:100%;">
-                            <div class="profile-card" style="background-image: url('\${p.photo}')">
+                            <div class="profile-card" style="background-image: url('${p.photo}')">
                                 <div class="profile-info">
-                                    <h2 style="margin:0;">\${p.name}, \${p.age} ans</h2>
-                                    <p style="margin:5px 0 0 0; font-size:0.85rem;">📍 \${p.city} • \${p.bio}</p>
+                                    <h2 style="margin:0;">${p.name}, ${p.age} ans</h2>
+                                    <p style="margin:5px 0 0 0; font-size:0.85rem;">📍 ${p.city} • ${p.bio}</p>
                                 </div>
                             </div>
                             <div style="display:flex; justify-content:space-around; gap:10px;">
@@ -353,17 +355,17 @@ app.get('/', (req, res) => {
                                 <button class="btn" style="background:#1b5e20;" onclick="sendLike()">💖 J'aime</button>
                             </div>
                         </div>
-                    \`;
+                    `;
                 }
                 else if(tab === 'matches') {
                     let html = '<div style="padding:15px;"><h3>Mes Conversations (Masolo) 💬</h3>';
                     let myMatches = discoveryProfiles.filter(u => u.id !== currentUser.id && u.role !== 'admin');
                     if(myMatches.length === 0) html += '<p style="color:#777;">Aucune conversation pour l\'instant.</p>';
                     else myMatches.forEach(m => {
-                        html += \`<div class="match-item" onclick="openChat(\${m.id})">
-                            <img src="\${m.photo}" />
-                            <div><strong>\${m.name}</strong><br><small style="color:#777;">Cliquez pour discuter...</small></div>
-                        </div>\`;
+                        html += `<div class="match-item" onclick="openChat(${m.id})">
+                            <img src="${m.photo}" />
+                            <div><strong>${m.name}</strong><br><small style="color:#777;">Cliquez pour discuter...</small></div>
+                        </div>`;
                     });
                     screen.innerHTML = html + '</div>';
                 }
@@ -371,15 +373,15 @@ app.get('/', (req, res) => {
                     renderPricing();
                 }
                 else if(tab === 'profile') {
-                    screen.innerHTML = \`
+                    screen.innerHTML = `
                         <div style="padding:20px;">
                             <h3>Mon Profil 👤</h3>
-                            <img src="\${currentUser.photo}" style="width:90px; height:90px; border-radius:50%; object-fit:cover; display:block; margin:0 auto 15px auto;" />
-                            <p style="text-align:center;"><strong>\${currentUser.name}</strong></p>
-                            <p style="text-align:center; font-size:0.85rem; color:#666;">Statut VIP : \${currentUser.isVip ? 'Actif ('+currentUser.vipPlan+') ✨' : 'Gratuit'}</p>
+                            <img src="${currentUser.photo}" style="width:90px; height:90px; border-radius:50%; object-fit:cover; display:block; margin:0 auto 15px auto;" />
+                            <p style="text-align:center;"><strong>${currentUser.name}</strong></p>
+                            <p style="text-align:center; font-size:0.85rem; color:#666;">Statut VIP : ${currentUser.isVip ? 'Actif ('+currentUser.vipPlan+') ✨' : 'Gratuit'}</p>
                             <button class="btn" style="background:#d32f2f; margin-top:20px;" onclick="logout()">Se déconnecter</button>
                         </div>
-                    \`;
+                    `;
                 }
                 else if(tab === 'admin') {
                     renderAdminDashboard();
@@ -392,12 +394,12 @@ app.get('/', (req, res) => {
             function openChat(targetId) {
                 activeChatUser = discoveryProfiles.find(u => u.id === targetId);
                 const screen = document.getElementById('mainScreen');
-                screen.innerHTML = \`
+                screen.innerHTML = `
                     <div style="display:flex; flex-direction:column; height:100%;">
                         <div style="background:#f5f5f5; padding:10px 15px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #ddd;">
                             <button onclick="renderTab('matches')" style="background:none; border:none; font-weight:bold; cursor:pointer;">⬅</button>
-                            <img src="\${activeChatUser.photo}" style="width:35px; height:35px; border-radius:50%; object-fit:cover;" />
-                            <strong>\${activeChatUser.name}</strong>
+                            <img src="${activeChatUser.photo}" style="width:35px; height:35px; border-radius:50%; object-fit:cover;" />
+                            <strong>${activeChatUser.name}</strong>
                         </div>
                         <div class="chat-messages" id="chatBox">
                             <div class="msg received">Mbote ! Heureux de discuter sur Masolo-ya-Congo.</div>
@@ -407,14 +409,14 @@ app.get('/', (req, res) => {
                             <button class="btn" style="width:auto; margin:0; padding:8px 15px;" onclick="sendMsg()">Envoyer</button>
                         </div>
                     </div>
-                \`;
+                `;
             }
 
             function sendMsg() {
                 const txt = document.getElementById('msgInput').value;
                 if(!txt) return;
                 const box = document.getElementById('chatBox');
-                box.innerHTML += \`<div class="msg sent">\${txt}</div>\`;
+                box.innerHTML += `<div class="msg sent">${txt}</div>`;
                 document.getElementById('msgInput').value = '';
                 box.scrollTop = box.scrollHeight;
             }
@@ -424,24 +426,24 @@ app.get('/', (req, res) => {
                 const data = await res.json();
                 let paymentsHtml = '';
                 data.pendingPayments.forEach(p => {
-                    paymentsHtml += \`
+                    paymentsHtml += `
                         <div style="background:#f9f9f9; border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px; font-size:0.85rem;">
-                            <strong>Membre :</strong> \${p.userName} (<span style="color:#1b5e20;">\${p.phone}</span>)<br>
-                            <strong>Formule M-Pesa :</strong> \${p.formula} (<span style="color:blue;">\${p.amount}</span>)<br>
-                            <strong>Réf M-Pesa :</strong> \${p.ref}<br>
-                            <button class="btn" style="background:#34a853; padding:8px; font-size:0.85rem; margin-top:8px;" onclick="approvePayment(\${p.id})">✅ Approuver et Activer VIP</button>
+                            <strong>Membre :</strong> ${p.userName} (<span style="color:#1b5e20;">${p.phone}</span>)<br>
+                            <strong>Formule M-Pesa :</strong> ${p.formula} (<span style="color:blue;">${p.amount}</span>)<br>
+                            <strong>Réf M-Pesa :</strong> ${p.ref}<br>
+                            <button class="btn" style="background:#34a853; padding:8px; font-size:0.85rem; margin-top:8px;" onclick="approvePayment(${p.id})">✅ Approuver et Activer VIP</button>
                         </div>
-                    \`;
+                    `;
                 });
 
-                document.getElementById('mainScreen').innerHTML = \`
+                document.getElementById('mainScreen').innerHTML = `
                     <div style="padding:20px;">
                         <h3>Panneau Administrateur M-Pesa 🛡️</h3>
                         <p style="font-size:0.85rem; color:#666;">Validation des paiements manuels M-Pesa pour activation des abonnements.</p>
                         <h4 style="color:#1b5e20; margin-top:15px;">Paiements en attente :</h4>
-                        \${paymentsHtml || '<p style="font-size:0.85rem; color:#777;">Aucun paiement en attente pour le moment.</p>'}
+                        ${paymentsHtml || '<p style="font-size:0.85rem; color:#777;">Aucun paiement en attente pour le moment.</p>'}
                     </div>
-                \`;
+                `;
             }
 
             async function approvePayment(id) {
@@ -468,17 +470,15 @@ app.get('/', (req, res) => {
 
 // --- API BACKEND ---
 app.get('/api/state', (req, res) => {
-  let currentUser = users.find(u => u.id === req.sessionUserId) || null;
+  let currentUser = users.find(u => u.id === req.session.userId) || null;
   res.json({ currentUser, discoveryProfiles: users, matchesList: matches });
 });
 
-let currentSessionId = 1;
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   const user = users.find(u => (u.email === email || u.phone === email) && u.password === password);
   if (user) {
-    req.sessionUserId = user.id;
-    currentSessionId = user.id;
+    req.session.userId = user.id;
     res.json({ success: true });
   } else {
     res.json({ success: false });
@@ -502,20 +502,19 @@ app.post('/api/register', (req, res) => {
     status: 'active'
   };
   users.push(newUser);
-  req.sessionUserId = newUser.id;
-  currentSessionId = newUser.id;
+  req.session.userId = newUser.id;
   res.json({ success: true });
 });
 
 app.post('/api/logout', (req, res) => {
-  req.sessionUserId = null;
-  currentSessionId = null;
-  res.json({ success: true });
+  req.session.destroy(() => {
+    res.json({ success: true });
+  });
 });
 
 app.post('/api/pay-submit', (req, res) => {
   const { formula, amount, operator, phone, ref } = req.body;
-  const user = users.find(u => u.id === currentSessionId);
+  const user = users.find(u => u.id === req.session.userId);
   if(!user) return res.sendStatus(401);
 
   pendingPayments.push({
